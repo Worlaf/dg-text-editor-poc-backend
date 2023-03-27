@@ -1,0 +1,15 @@
+.selectionLabel {
+  position: absolute;
+  color: white;
+  bottom: 100%;
+  transform: translate(-50%, 5px);
+  font-size: x-small;
+  padding: 2px;
+  border-radius: 2px;
+}
+
+.selectionLabelContainer {
+  position: relative;
+  min-width: 2px;
+  border-right: 2px solid;
+}

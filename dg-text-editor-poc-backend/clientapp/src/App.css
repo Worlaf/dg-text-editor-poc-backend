@@ -1,0 +1,38 @@
+.main {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #eeeeee;
+}
+
+body,
+html,
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+.container {
+  max-width: 800px;
+  width: 80%;
+  margin-top: 20px;
+  background-color: white;
+  padding: 20px;
+  min-height: calc(100% - 40px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  row-gap: 20px;
+}
+
+.editor {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.userList {
+  display: flex;
+  flex-direction: row;
+  column-gap: 10px;
+}
