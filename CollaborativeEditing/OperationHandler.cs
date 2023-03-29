@@ -25,8 +25,13 @@ namespace CollaborativeEditing
             }
             else
             {
-                var revisionsToApply = revisionLog.Where(revision => revision.DocumentRevision > batch.DocumentRevision);
-                var transformedBatch = revisionsToApply.Aggregate(batch, (revisionToApply, result) => TransformOperationBatch(result, revisionToApply));
+                var revisionsToApply = revisionLog.Where(revision => revision.DocumentRevision >= batch.DocumentRevision);
+                if (!revisionsToApply.Any())
+                {
+                    throw new Exception("No revision to apply transforms against!");
+                }
+
+                var transformedBatch = revisionsToApply.Aggregate(batch, (result, revisionToApply) => TransformOperationBatch(result, revisionToApply));
 
                 return ApplyOperationBatch(document, transformedBatch, revisionLog);
             }
@@ -216,7 +221,7 @@ namespace CollaborativeEditing
         // this is not correct implementation, just the basic
         private OperationBatch TransformOperationBatch(OperationBatch batch, OperationBatch transformAgainst)
         {
-            if (transformAgainst.DocumentRevision - batch.DocumentRevision > 1) throw new Exception("Document revision of batch being transformed is too old");
+            if (transformAgainst.DocumentRevision - batch.DocumentRevision > 0) throw new Exception("Document revision of batch being transformed is too old");
 
 
             var transformedOperations = batch.Operations
@@ -226,7 +231,7 @@ namespace CollaborativeEditing
 
             return new OperationBatch()
             {
-                DocumentRevision = transformAgainst.DocumentRevision,
+                DocumentRevision = transformAgainst.DocumentRevision + 1,
                 Operations = transformedOperations
             };
         }
