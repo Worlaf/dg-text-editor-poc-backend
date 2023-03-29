@@ -1,18 +1,19 @@
 import { useState } from "react";
 import "./App.css";
+import { useCollaborativeEditingContext } from "./collaborativeEditing/collaborativeEditingContext";
 import { Editor } from "./components/Editor/Editor";
 
-import { useCollaborativeContext } from "./collaborativeEditing/utils";
+import { isNotNil } from "./utils/typeGuards";
 
 function App() {
   const [userName, setUserName] = useState("anonymous");
 
-  const { connect, userContext, getDocument, documentContext, otherUsers } =
-    useCollaborativeContext();
+  const { connect, currentUser, documentContext, requestDocument, otherUsers } =
+    useCollaborativeEditingContext();
 
   const handleConnect = async () => {
     await connect(userName);
-    await getDocument();
+    await requestDocument();
   };
 
   return (
@@ -24,9 +25,9 @@ function App() {
             value={userName}
             onChange={(e) => setUserName(e.target.value)}
             placeholder="userName"
-            disabled={!!userContext}
+            disabled={isNotNil(currentUser)}
           />
-          <button disabled={!!userContext} onClick={handleConnect}>
+          <button disabled={isNotNil(currentUser)} onClick={handleConnect}>
             Connect
           </button>
           <div className="userList">
@@ -38,14 +39,14 @@ function App() {
           </div>
         </div>
         <div>
-          {!documentContext ? (
-            <div>Connect to start editing</div>
-          ) : (
+          {isNotNil(documentContext) ? (
             <Editor
               users={otherUsers}
               document={documentContext.document}
               className="editor"
             />
+          ) : (
+            <div>Connect to start editing</div>
           )}
         </div>
       </div>

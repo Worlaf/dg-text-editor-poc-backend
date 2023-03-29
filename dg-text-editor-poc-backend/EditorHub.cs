@@ -1,5 +1,6 @@
 ﻿using CollaborativeEditing;
 using Microsoft.AspNetCore.SignalR;
+using System.Text.Json.Nodes;
 using Range = CollaborativeEditing.Range;
 
 namespace dg_text_editor_poc_backend
@@ -44,9 +45,15 @@ namespace dg_text_editor_poc_backend
             return base.OnDisconnectedAsync(exception);
         }
 
-        public void SendOperation(string operationJson)
+        public void SendOperations(OperationBatchDto operationBatchDto)
         {
-            var operations = new OperationFactory().FromJson(operationJson).ToArray();
+            var operationBatch = new OperationBatch()
+            {
+                DocumentRevision = operationBatchDto.DocumentRevision,
+                Operations = new OperationFactory().FromJson(operationBatchDto.Operations).ToArray()
+            };
+
+            var operations = operationBatch.Operations;
             var operationHandler = new OperationHandler();
             var document = documentProvider.Get();
 
@@ -55,7 +62,9 @@ namespace dg_text_editor_poc_backend
                 operationHandler.ApplyOperation(document, operation);
             }
 
-            Clients.Others.SendAsync("ReceiveOperation", operationJson);
+            // appears, SignalR don't serialize properties of derived classes, so it need to be configured
+            // via custom serializer/serializer options, or workarounded like following
+            Clients.Others.SendAsync("ReceiveOperations", operationBatchDto);
         }
 
         public void SendUserSelection(Range documentSelection)
@@ -81,5 +90,12 @@ namespace dg_text_editor_poc_backend
             User = user;
             ConnectionId = connectionId;
         }
+    }
+
+    // todo: setup json deserialization with deriving of concrete operation class
+    public class OperationBatchDto
+    {
+        public int DocumentRevision { get; set; }
+        public JsonArray Operations { get; set; }
     }
 }

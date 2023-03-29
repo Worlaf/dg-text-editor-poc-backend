@@ -1,6 +1,4 @@
-import classNames from "classnames";
 import { RenderLeafProps } from "slate-react";
-import { isNotNil } from "../../utils/typeGuards";
 
 import "./EditorLeaf.css";
 
@@ -32,6 +30,7 @@ export const EditorLeaf: React.FC<RenderLeafProps> = ({
         <span
           className="selectionLabelContainer"
           style={{ borderRightColor: leaf.selectionBackgroundColor }}
+          contentEditable={false}
         >
           <span
             style={{ backgroundColor: leaf.selectionBackgroundColor }}

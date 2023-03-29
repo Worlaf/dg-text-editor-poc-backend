@@ -85,7 +85,12 @@ namespace CollaborativeEditing
                 throw new Exception("Failed to parse operation array");
             }
 
-            foreach (var jsonItem in jsonArray)
+            return FromJson(jsonArray);
+        }
+
+        public IEnumerable<OperationBase> FromJson(JsonArray operationsJson)
+        {
+            foreach (var jsonItem in operationsJson)
             {
                 var operation = GetOperation(jsonItem);
                 if (operation != null)

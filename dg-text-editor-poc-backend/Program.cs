@@ -1,10 +1,8 @@
 using dg_text_editor_poc_backend;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddSignalR();
 builder.Services.AddCors();
 builder.Services.AddMemoryCache();

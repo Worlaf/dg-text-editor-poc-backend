@@ -6,7 +6,6 @@ import {
   NodeEntry,
   BaseRange,
   Text,
-  Path,
 } from "slate";
 import { Slate, Editable, withReact, RenderLeafProps } from "slate-react";
 import { ToolbarButton } from "./ToolbarButton";
@@ -16,10 +15,10 @@ import { EditorLeaf } from "./EditorLeaf";
 import { EDITOR_FEATURES } from "./utils";
 import { HoveringToolbar } from "./HoveringToolbar";
 import { isUndefined } from "lodash";
-import { withCollaborativeEditing } from "../../collaborativeEditing/withCollaborativeEditing";
 import { Document } from "../../collaborativeEditing/documentContext";
 import { UserModel } from "../../collaborativeEditing/userContext";
 import { isNotNil } from "../../utils/typeGuards";
+import { useCollaborativeEditing } from "../../collaborativeEditing/useCollaborativeEditing";
 
 type Props = {
   className?: string;
@@ -28,14 +27,14 @@ type Props = {
 };
 
 export const Editor: React.FC<Props> = ({ className, document, users }) => {
-  const editor = React.useMemo(
-    () => withCollaborativeEditing(withReact(createEditor())),
-    []
-  );
+  const editor = React.useMemo(() => withReact(createEditor()), []);
+
   const renderLeaf = React.useCallback(
     (props: RenderLeafProps) => <EditorLeaf {...props} />,
     []
   );
+
+  const { handleChange } = useCollaborativeEditing(editor);
 
   const decorate = React.useCallback(
     ([node, path]: NodeEntry): BaseRange[] => {
@@ -57,7 +56,7 @@ export const Editor: React.FC<Props> = ({ className, document, users }) => {
               nodeRange
             );
 
-            const [start, end] = Range.edges(documentSelection);
+            const [_start, end] = Range.edges(documentSelection);
 
             return isNotNil(intersection)
               ? {
@@ -121,7 +120,7 @@ export const Editor: React.FC<Props> = ({ className, document, users }) => {
   };
 
   return (
-    <Slate editor={editor} value={document}>
+    <Slate onChange={handleChange} editor={editor} value={document}>
       <div className="toolbar">
         {EDITOR_FEATURES.map((feature, index) => (
           <ToolbarButton
