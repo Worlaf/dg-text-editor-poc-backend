@@ -7,7 +7,8 @@ builder.Services.AddSignalR();
 builder.Services.AddCors();
 builder.Services.AddMemoryCache();
 
-builder.Services.AddScoped<IDocumentProvider, MemoryCacheDocumentProvider>();
+builder.Services.AddScoped<IDocumentProvider, DocumentProvider>();
+builder.Services.AddScoped<IRevisionLogProvider, RevisionLogProvider>();
 
 
 var app = builder.Build();

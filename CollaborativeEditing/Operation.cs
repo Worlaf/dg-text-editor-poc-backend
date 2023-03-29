@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -15,9 +16,26 @@ namespace CollaborativeEditing
         public abstract string Type { get; }
     }
 
-    public abstract class NodeOperationBase : OperationBase
+
+
+    public abstract class NodeOperationBase : OperationBase, IPathOperation
     {
         public int[] Path { get; set; }
+    }
+
+    public interface IPathOperation
+    {
+        public int[] Path { get; set; }
+    }
+
+    public interface IPositionOperation : IPathOperation
+    {
+        public int Position { get; set; }
+    }
+
+    public interface IOffsetOperation : IPathOperation
+    {
+        public int Offset { get; set; }
     }
 
     public class InsertNodeOperation : NodeOperationBase
@@ -27,7 +45,7 @@ namespace CollaborativeEditing
         public override string Type => "insert_node";
     }
 
-    public class InsertTextOperation : NodeOperationBase
+    public class InsertTextOperation : NodeOperationBase, IOffsetOperation
     {
         public int Offset { get; set; }
         public string Text { get; set; }
@@ -35,7 +53,7 @@ namespace CollaborativeEditing
         public override string Type => "insert_text";
     }
 
-    public class MergeNodeOperation : NodeOperationBase
+    public class MergeNodeOperation : NodeOperationBase, IPositionOperation
     {
         public int Position { get; set; }
         public JsonNode Properties { get; set; } // todo:
@@ -54,7 +72,7 @@ namespace CollaborativeEditing
         public override string Type => "remove_node";
     }
 
-    public class RemoveTextOperation : NodeOperationBase
+    public class RemoveTextOperation : NodeOperationBase, IOffsetOperation
     {
         public int Offset { get; set; }
         public string Text { get; set; }
@@ -68,7 +86,7 @@ namespace CollaborativeEditing
         public override string Type => "set_node";
     }
 
-    public class SplitNodeOperation : NodeOperationBase
+    public class SplitNodeOperation : NodeOperationBase, IPositionOperation
     {
         public int Position { get; set; }
         public JsonNode Properties { get; set; }
@@ -98,6 +116,81 @@ namespace CollaborativeEditing
                     yield return operation;
                 }
             }
+        }
+
+        public OperationBase Clone(OperationBase operation)
+        {
+            if (operation is InsertNodeOperation insertNodeOperation)
+            {
+                return new InsertNodeOperation()
+                {
+                    Node = insertNodeOperation.Node,
+                    Path = insertNodeOperation.Path,
+                };
+            }
+            if (operation is InsertTextOperation insertTextOperation)
+            {
+                return new InsertTextOperation()
+                {
+                    Text = insertTextOperation.Text,
+                    Path = insertTextOperation.Path,
+                    Offset = insertTextOperation.Offset
+                };
+            }
+            if (operation is MergeNodeOperation mergeNodeOperation)
+            {
+                return new MergeNodeOperation()
+                {
+                    Path = mergeNodeOperation.Path,
+                    Position = mergeNodeOperation.Position,
+                    Properties = mergeNodeOperation.Properties,
+                };
+            }
+            if (operation is MoveNodeOperation moveNodeOperation)
+            {
+                return new MoveNodeOperation()
+                {
+                    NewPath = moveNodeOperation.NewPath,
+                    Path = moveNodeOperation.Path,
+                };
+            }
+            if (operation is RemoveNodeOperation removeNodeOperation)
+            {
+                return new RemoveNodeOperation()
+                {
+                    Node = removeNodeOperation.Node,
+                    Path = removeNodeOperation.Path,
+                };
+            }
+            if (operation is RemoveTextOperation removeTextOperation)
+            {
+                return new RemoveTextOperation()
+                {
+                    Text = removeTextOperation.Text,
+                    Offset = removeTextOperation.Offset,
+                    Path = removeTextOperation.Path,
+                };
+            }
+            if (operation is SetNodeOperation setNodeOperation)
+            {
+                return new SetNodeOperation()
+                {
+                    Properties = setNodeOperation.Properties,
+                    NewProperties = setNodeOperation.NewProperties,
+                    Path = setNodeOperation.Path,
+                };
+            }
+            if (operation is SplitNodeOperation splitNodeOperation)
+            {
+                return new SplitNodeOperation()
+                {
+                    Path = splitNodeOperation.Path,
+                    Position = splitNodeOperation.Position,
+                    Properties = splitNodeOperation.Properties,
+                };
+            }
+
+            throw new Exception($"Unsupported operation type: {operation.Type}");
         }
 
         private OperationBase? GetOperation(JsonNode? jsonNode)
@@ -136,5 +229,6 @@ namespace CollaborativeEditing
 
             throw new Exception("Failed to parse operation");
         }
+
     }
 }

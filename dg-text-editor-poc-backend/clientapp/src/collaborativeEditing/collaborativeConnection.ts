@@ -11,18 +11,37 @@ const hubUrl =
 const connection = new msSignalR.HubConnectionBuilder().withUrl(hubUrl).build();
 
 type GenericHandler = (...args: any[]) => any;
-const createSignalrMethod = (methodName: string) => ({
-  on: (handler: GenericHandler) => connection.on(methodName, handler),
-  off: (handler: GenericHandler) => connection.off(methodName, handler),
+const createSignalrServerEvent = <THandler extends GenericHandler>(
+  methodName: string
+) => ({
+  on: (handler: THandler) => connection.on(methodName, handler),
+  off: (handler: THandler) => connection.off(methodName, handler),
   offAll: () => connection.off(methodName),
 });
 
 export const collaborativeConnection = {
-  receiveOperations: createSignalrMethod("ReceiveOperations"),
-  userConnected: createSignalrMethod("UserConnected"),
-  userDisconnected: createSignalrMethod("UserDisconnected"),
-  userUpdated: createSignalrMethod("UserUpdated"),
-  receiveDocument: createSignalrMethod("ReceiveDocument"),
+  receiveOperations:
+    createSignalrServerEvent<(batch: OperationBatch) => void>(
+      "ReceiveOperations"
+    ),
+  userConnected:
+    createSignalrServerEvent<(user: UserContext) => void>("UserConnected"),
+  userDisconnected:
+    createSignalrServerEvent<(userId: string) => void>("UserDisconnected"),
+  userUpdated:
+    createSignalrServerEvent<(user: UserContext) => void>("UserUpdated"),
+  receiveDocument:
+    createSignalrServerEvent<
+      (
+        revision: number,
+        json: string,
+        connectedUsers: ReadonlyArray<UserContext>
+      ) => void
+    >("ReceiveDocument"),
+  acknowledgeChanges:
+    createSignalrServerEvent<(newRevisionId: number) => void>(
+      "AcknowledgeChanges"
+    ),
 
   sendOperations: (operations: OperationBatch) =>
     connection.send("SendOperations", operations),

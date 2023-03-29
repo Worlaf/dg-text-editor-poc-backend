@@ -6,6 +6,7 @@ import { Document, DocumentContext } from "./documentContext";
 import { UserContext, UserModel } from "./userContext";
 import { collaborativeConnection as connection } from "./collaborativeConnection";
 import { getUserColor } from "./utils";
+import { isNotNil } from "../utils/typeGuards";
 
 type ContextData = {
   documentContext: DocumentContext | undefined;
@@ -14,6 +15,7 @@ type ContextData = {
   requestDocument: () => Promise<void>;
   updateUser: (userModel: UserContext) => void;
   connect: (userName: string) => Promise<void>;
+  setDocumentRevision: (newVersion: number) => void;
 };
 
 const CollaborativeEditingContext = React.createContext<ContextData>({
@@ -23,6 +25,7 @@ const CollaborativeEditingContext = React.createContext<ContextData>({
   requestDocument: () => Promise.resolve(),
   updateUser: noop,
   connect: () => Promise.resolve(),
+  setDocumentRevision: noop,
 });
 
 export const CollaborativeEditingContextProvider: React.FC<{
@@ -97,7 +100,7 @@ export const CollaborativeEditingContextProvider: React.FC<{
 
     return () => {
       connection.userConnected.off(handleUserConnected);
-      connection.userUpdated.off(handleUserDisconnected);
+      connection.userDisconnected.off(handleUserDisconnected);
       connection.userUpdated.off(handleUserUpdated);
     };
   }, [handleUserConnected, handleUserDisconnected, handleUserUpdated]);
@@ -120,6 +123,10 @@ export const CollaborativeEditingContextProvider: React.FC<{
         otherUsers,
         connect,
         updateUser: handleUserUpdated,
+        setDocumentRevision: (revision: number) =>
+          setDocumentContext((context) =>
+            isNotNil(context) ? { ...context, revision } : undefined
+          ),
       }}
     >
       {children}

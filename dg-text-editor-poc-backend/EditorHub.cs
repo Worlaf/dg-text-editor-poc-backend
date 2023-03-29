@@ -1,6 +1,8 @@
 ﻿using CollaborativeEditing;
 using Microsoft.AspNetCore.SignalR;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Range = CollaborativeEditing.Range;
 
 namespace dg_text_editor_poc_backend
@@ -8,13 +10,15 @@ namespace dg_text_editor_poc_backend
     public class EditorHub : Hub
     {
         private IDocumentProvider documentProvider;
+        private IRevisionLogProvider revisionLogProvider;
 
         // todo: proper authentication
         private static List<ConnectionContext> connections = new List<ConnectionContext>();
 
-        public EditorHub(IDocumentProvider documentProvider)
+        public EditorHub(IDocumentProvider documentProvider, IRevisionLogProvider revisionLogProvider)
         {
             this.documentProvider = documentProvider;
+            this.revisionLogProvider = revisionLogProvider;
         }
 
         public void SetUser(UserContext userContext)
@@ -53,18 +57,29 @@ namespace dg_text_editor_poc_backend
                 Operations = new OperationFactory().FromJson(operationBatchDto.Operations).ToArray()
             };
 
-            var operations = operationBatch.Operations;
             var operationHandler = new OperationHandler();
             var document = documentProvider.Get();
+            var revisionLog = revisionLogProvider.Get();
 
-            foreach (var operation in operations)
-            {
-                operationHandler.ApplyOperation(document, operation);
-            }
+            var appliedBatch = operationHandler.ApplyOperationBatch(document, operationBatch, revisionLog);
+            revisionLog.Add(appliedBatch);
+
+            Clients.Caller.SendAsync("AcknowledgeChanges", document.Revision);
 
             // appears, SignalR don't serialize properties of derived classes, so it need to be configured
             // via custom serializer/serializer options, or workarounded like following
-            Clients.Others.SendAsync("ReceiveOperations", operationBatchDto);
+            var serializerOptions = new JsonSerializerOptions()
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            };
+
+            var appliedBatchDto = new OperationBatchDto()
+            {
+                DocumentRevision = appliedBatch.DocumentRevision,
+                Operations = new JsonArray(appliedBatch.Operations.Select(operation => JsonNode.Parse(JsonSerializer.Serialize(operation, operation.GetType(), serializerOptions))).ToArray())
+            };
+
+            Clients.Others.SendAsync("ReceiveOperations", appliedBatchDto);
         }
 
         public void SendUserSelection(Range documentSelection)

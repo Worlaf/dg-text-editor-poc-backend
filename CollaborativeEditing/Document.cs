@@ -17,7 +17,7 @@ namespace CollaborativeEditing
 
         public Document(int revision, string contentJson)
         {
-            var node = JsonNode.Parse(contentJson);            
+            var node = JsonNode.Parse(contentJson);
 
             if (node == null || node is JsonArray)
             {
@@ -69,6 +69,11 @@ namespace CollaborativeEditing
             }
 
             return GetNode(path.Take(path.Length - 1).ToArray());
+        }
+
+        public void IncreaseRevision()
+        {
+            Revision++;
         }
     }
 }

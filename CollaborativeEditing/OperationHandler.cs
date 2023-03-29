@@ -10,6 +10,28 @@ namespace CollaborativeEditing
 {
     public class OperationHandler
     {
+        public OperationBatch ApplyOperationBatch(Document document, OperationBatch batch, IEnumerable<OperationBatch> revisionLog)
+        {
+            if (document.Revision == batch.DocumentRevision)
+            {
+                foreach (var operation in batch.Operations)
+                {
+                    ApplyOperation(document, operation);
+                }
+
+                document.IncreaseRevision();
+
+                return batch;
+            }
+            else
+            {
+                var revisionsToApply = revisionLog.Where(revision => revision.DocumentRevision > batch.DocumentRevision);
+                var transformedBatch = revisionsToApply.Aggregate(batch, (revisionToApply, result) => TransformOperationBatch(result, revisionToApply));
+
+                return ApplyOperationBatch(document, transformedBatch, revisionLog);
+            }
+        }
+
         public void ApplyOperation(Document document, OperationBase operation)
         {
             if (operation is InsertNodeOperation insertNodeOperation) { Apply(document, insertNodeOperation); }
@@ -22,7 +44,7 @@ namespace CollaborativeEditing
             if (operation is SplitNodeOperation splitNodeOperation) { Apply(document, splitNodeOperation); }
         }
 
-        public void Apply(Document document, InsertNodeOperation operation)
+        private void Apply(Document document, InsertNodeOperation operation)
         {
             var parent = document.GetParent(operation.Path);
             var index = operation.Path.Last();
@@ -42,7 +64,7 @@ namespace CollaborativeEditing
             throw new Exception("Failed to execute Insert Node Operation");
         }
 
-        public void Apply(Document document, InsertTextOperation operation)
+        private void Apply(Document document, InsertTextOperation operation)
         {
             var node = document.GetNode(operation.Path);
             // check if it is leaf?
@@ -59,7 +81,7 @@ namespace CollaborativeEditing
             throw new Exception("Failed to execute Insert Text Operation");
         }
 
-        public void Apply(Document document, MergeNodeOperation operation)
+        private void Apply(Document document, MergeNodeOperation operation)
         {
             var node = document.GetNode(operation.Path);
             var prevPath = PathHelpers.GetPrevious(operation.Path);
@@ -83,7 +105,7 @@ namespace CollaborativeEditing
             parent.GetChildren().RemoveAt(index);
         }
 
-        public void Apply(Document document, MoveNodeOperation operation)
+        private void Apply(Document document, MoveNodeOperation operation)
         {
             if (PathHelpers.IsAncestor(operation.Path, operation.NewPath))
             {
@@ -104,7 +126,7 @@ namespace CollaborativeEditing
             newParent.GetChildren().Insert(newIndex, node); // probably need to copy node to detach from previous parent
         }
 
-        public void Apply(Document document, RemoveNodeOperation operation)
+        private void Apply(Document document, RemoveNodeOperation operation)
         {
             var index = operation.Path.Last();
             var parent = document.GetParent(operation.Path);
@@ -112,7 +134,7 @@ namespace CollaborativeEditing
             parent.GetChildren().RemoveAt(index);
         }
 
-        public void Apply(Document document, RemoveTextOperation operation)
+        private void Apply(Document document, RemoveTextOperation operation)
         {
             if (operation.Text.Length == 0) return;
 
@@ -126,7 +148,7 @@ namespace CollaborativeEditing
             node.SetText(before + after);
         }
 
-        public void Apply(Document document, SetNodeOperation operation)
+        private void Apply(Document document, SetNodeOperation operation)
         {
             if (operation.Path.Length == 0) throw new Exception("Can't set properties for root node");
 
@@ -140,7 +162,7 @@ namespace CollaborativeEditing
                 if (value != null)
                 {
                     node.Add(prop.Key, value.Copy());
-                }                
+                }
             }
 
             foreach (var prop in operation.Properties)
@@ -152,7 +174,7 @@ namespace CollaborativeEditing
             }
         }
 
-        public void Apply(Document document, SplitNodeOperation operation)
+        private void Apply(Document document, SplitNodeOperation operation)
         {
             var node = document.GetNode(operation.Path);
             var parent = document.GetParent(operation.Path);
@@ -188,6 +210,281 @@ namespace CollaborativeEditing
             }
 
             parent["children"]?.AsArray().Insert(index + 1, newNode);
+        }
+
+        // this logic should be same as on frontend
+        // this is not correct implementation, just the basic
+        private OperationBatch TransformOperationBatch(OperationBatch batch, OperationBatch transformAgainst)
+        {
+            if (transformAgainst.DocumentRevision - batch.DocumentRevision > 1) throw new Exception("Document revision of batch being transformed is too old");
+
+
+            var transformedOperations = batch.Operations
+                .Select(operation => TransformOperation(operation, transformAgainst))
+                .OfType<OperationBase>()
+                .ToArray();
+
+            return new OperationBatch()
+            {
+                DocumentRevision = transformAgainst.DocumentRevision,
+                Operations = transformedOperations
+            };
+        }
+
+        private OperationBase? TransformOperation(OperationBase operation, OperationBatch transformAgainst)
+        {
+            var clone = new OperationFactory().Clone(operation);
+            foreach (var against in transformAgainst.Operations)
+            {
+                if (against is IPositionOperation againstPosition)
+                {
+                    if (clone is IPositionOperation positionOperation)
+                    {
+                        var result = TransformPoint(positionOperation.Path, positionOperation.Position, againstPosition);
+                        if (result != null)
+                        {
+                            positionOperation.Position = result.Offset;
+                            positionOperation.Path = result.Path;
+                        }
+                        else
+                        {
+                            return null;
+                        }
+                    }
+                    else if (clone is IOffsetOperation offsetOperation)
+                    {
+                        var result = TransformPoint(offsetOperation.Path, offsetOperation.Offset, againstPosition);
+                        if (result != null)
+                        {
+                            offsetOperation.Offset = result.Offset;
+                            offsetOperation.Path = result.Path;
+                        }
+                        else
+                        {
+                            return null;
+                        }
+                    }
+                    else if (clone is IPathOperation pathOperation)
+                    {
+                        var result = TransformPath(pathOperation.Path, againstPosition);
+                        if (result != null)
+                        {
+                            pathOperation.Path = result;
+                        }
+                        else
+                        {
+                            return null;
+                        }
+                    }
+                }
+            }
+
+            return clone;
+        }
+
+        private Point? TransformPoint(int[] initialPath, int initialOfset, IPathOperation operation, bool isBackwardAffinity = false)
+        {
+            var path = initialPath;
+            var offset = initialOfset;
+
+            if (operation is InsertNodeOperation || operation is MoveNodeOperation)
+            {
+                path = TransformPath(path, operation, isBackwardAffinity);
+            }
+            else if (operation is InsertTextOperation insertTextOperation)
+            {
+                if (
+                    PathHelpers.Equals(operation.Path, path) &&
+                    (insertTextOperation.Offset < offset ||
+                      (insertTextOperation.Offset == offset && !isBackwardAffinity))
+                  )
+                {
+                    offset += insertTextOperation.Text.Length;
+                }
+            }
+            else if (operation is MergeNodeOperation mergeOperation)
+            {
+                if (PathHelpers.Equals(operation.Path, path))
+                {
+                    offset += mergeOperation.Position;
+                }
+
+                path = TransformPath(path, operation, isBackwardAffinity);
+            }
+            else if (operation is RemoveTextOperation removeTextOperation)
+            {
+                if (PathHelpers.Equals(operation.Path, path) && removeTextOperation.Offset <= offset)
+                {
+                    offset -= Math.Min(offset - removeTextOperation.Offset, removeTextOperation.Text.Length);
+                }
+            }
+            else if (operation is RemoveNodeOperation removeNodeOperation)
+            {
+                if (PathHelpers.Equals(operation.Path, path) || PathHelpers.IsAncestor(operation.Path, path))
+                {
+                    return null;
+                }
+
+                path = TransformPath(path, operation, isBackwardAffinity);
+            }
+            else if (operation is SplitNodeOperation splitNodeOperation)
+            {
+                if (PathHelpers.Equals(operation.Path, path))
+                {
+                    if (
+                          splitNodeOperation.Position < offset ||
+                          (splitNodeOperation.Position == offset && !isBackwardAffinity)
+                        )
+                    {
+                        offset -= splitNodeOperation.Position;
+
+                        path = TransformPath(path, operation);
+                    }
+                }
+                else
+                {
+                    path = TransformPath(path, operation, isBackwardAffinity);
+                }
+            }
+
+            if (path == null)
+            {
+                throw new Exception("path can't be null :(");
+            }
+
+            return new Point
+            {
+                Offset = offset,
+                Path = path,
+            };
+        }
+
+        private int[]? TransformPath(int[] path, IPathOperation operation, bool isBackwardAffinity = false)
+        {
+            var p = new int[path.Length];
+            path.CopyTo(p, 0);
+
+            if (path.Length == 0) return path;
+
+            if (operation is InsertNodeOperation insertNodeOperation)
+            {
+                var op = insertNodeOperation.Path;
+
+                if (PathHelpers.Equals(op, p) || PathHelpers.EndsBefore(op, p) || PathHelpers.IsAncestor(op, p))
+                {
+                    p[op.Length - 1] += 1;
+                }
+            }
+            else if (operation is RemoveNodeOperation removeNodeOperation)
+            {
+                var op = removeNodeOperation.Path;
+
+                if (PathHelpers.Equals(op, p) || PathHelpers.IsAncestor(op, p))
+                {
+                    return null;
+                }
+                else if (PathHelpers.EndsBefore(op, p))
+                {
+                    p[op.Length - 1] -= 1;
+                }
+            }
+            else if (operation is MergeNodeOperation mergeNodeOperation)
+            {
+                var op = mergeNodeOperation.Path;
+
+                if (PathHelpers.Equals(op, p) || PathHelpers.EndsBefore(op, p))
+                {
+                    p[op.Length - 1] -= 1;
+                }
+                else if (PathHelpers.IsAncestor(op, p))
+                {
+                    p[op.Length - 1] -= 1;
+                    p[op.Length] += mergeNodeOperation.Position;
+                }
+            }
+            else if (operation is SplitNodeOperation splitNodeOperation)
+            {
+                var op = splitNodeOperation.Path;
+                var position = splitNodeOperation.Position;
+
+                if (PathHelpers.Equals(op, p))
+                {
+                    if (!isBackwardAffinity)
+                    {
+                        p[p.Length - 1] += 1;
+                    }
+                }
+                else if (PathHelpers.EndsBefore(op, p))
+                {
+                    p[op.Length - 1] += 1;
+                }
+                else if (PathHelpers.IsAncestor(op, p) && path[op.Length] >= position)
+                {
+                    p[op.Length - 1] += 1;
+                    p[op.Length] -= position;
+                }
+            }
+            else if (operation is MoveNodeOperation moveNodeOperation)
+            {
+                var op = moveNodeOperation.Path;
+                var onp = moveNodeOperation.NewPath;
+
+                if (PathHelpers.Equals(op, onp))
+                {
+                    return p;
+                }
+
+                if (PathHelpers.IsAncestor(op, p) || PathHelpers.Equals(op, p))
+                {
+                    var copy = onp.Skip(0).ToArray();
+
+                    if (PathHelpers.EndsBefore(op, onp) && op.Length < onp.Length)
+                    {
+                        copy[op.Length - 1] -= 1;
+                    }
+
+                    return copy.Concat(p.Skip(op.Length)).ToArray();
+                }
+                else if (PathHelpers.IsSibling(op, onp) && (PathHelpers.IsAncestor(onp, p) || PathHelpers.Equals(onp, p)))
+                {
+                    if (PathHelpers.EndsBefore(op, p))
+                    {
+                        p[op.Length - 1] -= 1;
+                    }
+                    else
+                    {
+                        p[op.Length - 1] += 1;
+                    }
+                }
+                else if (PathHelpers.EndsBefore(onp, p) || PathHelpers.Equals(onp, p) || PathHelpers.IsAncestor(onp, p)
+                )
+                {
+                    if (PathHelpers.EndsBefore(op, p))
+                    {
+                        p[op.Length - 1] -= 1;
+                    }
+
+                    p[onp.Length - 1] += 1;
+                }
+                else if (PathHelpers.EndsBefore(op, p))
+                {
+                    if (PathHelpers.Equals(onp, p))
+                    {
+                        p[onp.Length - 1] += 1;
+                    }
+
+                    p[op.Length - 1] -= 1;
+                }
+
+            }
+
+            return p;
+        }
+
+        private class Point
+        {
+            public int[] Path { get; set; }
+            public int Offset { get; set; }
         }
     }
 }

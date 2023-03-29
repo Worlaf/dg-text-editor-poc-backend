@@ -15,7 +15,8 @@ const debouncedSendUserSelection = _.debounce((selection: BaseRange) => {
 export const useCollaborativeEditing = (editor: Editor) => {
   const isRemoteRef = useRef(false);
 
-  const { otherUsers, updateUser } = useCollaborativeEditingContext();
+  const { otherUsers, updateUser, documentContext, setDocumentRevision } =
+    useCollaborativeEditingContext();
 
   const handleChange = useCallback(() => {
     if (!isRemoteRef.current) {
@@ -27,7 +28,7 @@ export const useCollaborativeEditing = (editor: Editor) => {
 
       if (notSelectionOperations.length > 0) {
         collaborativeConnection.sendOperations({
-          documentRevision: 0,
+          documentRevision: documentContext?.revision ?? 0,
           operations: notSelectionOperations,
         });
 
@@ -60,14 +61,22 @@ export const useCollaborativeEditing = (editor: Editor) => {
         debouncedSendUserSelection(selection);
       }
     }
-  }, [editor, otherUsers, updateUser]);
+  }, [documentContext?.revision, editor, otherUsers, updateUser]);
 
   const handleReceiveOperations = useCallback(
     (batch: OperationBatch) => {
       try {
-        const { operations } = batch;
+        const currentRevision = documentContext?.revision ?? 0;
+        const { operations, documentRevision: batchDocumentRevision } = batch;
 
-        console.log("Receive Operation:", { operations });
+        console.log("Received operations", { batch });
+
+        if (currentRevision < batchDocumentRevision) {
+          // todo:
+          console.error(
+            "Client-side operation transformation is not yet implemented :("
+          );
+        }
 
         isRemoteRef.current = true;
 
@@ -80,11 +89,25 @@ export const useCollaborativeEditing = (editor: Editor) => {
         });
 
         transformOtherUserSelections({ operations, otherUsers, updateUser });
+        setDocumentRevision(batchDocumentRevision + 1);
       } catch (error) {
         console.error(error);
       }
     },
-    [editor, otherUsers, updateUser]
+    [
+      documentContext?.revision,
+      editor,
+      otherUsers,
+      setDocumentRevision,
+      updateUser,
+    ]
+  );
+
+  const handleAcknowledgeChanges = useCallback(
+    (newDocumentRevision: number) => {
+      setDocumentRevision(newDocumentRevision);
+    },
+    [setDocumentRevision]
   );
 
   useEffect(() => {
@@ -93,6 +116,13 @@ export const useCollaborativeEditing = (editor: Editor) => {
     return () =>
       collaborativeConnection.receiveOperations.off(handleReceiveOperations);
   }, [handleReceiveOperations]);
+
+  useEffect(() => {
+    collaborativeConnection.acknowledgeChanges.on(handleAcknowledgeChanges);
+
+    return () =>
+      collaborativeConnection.acknowledgeChanges.off(handleAcknowledgeChanges);
+  }, [handleAcknowledgeChanges]);
 
   return { handleChange };
 };
