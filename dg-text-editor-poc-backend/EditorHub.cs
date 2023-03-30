@@ -61,6 +61,9 @@ namespace dg_text_editor_poc_backend
             var document = documentProvider.Get();
             var revisionLog = revisionLogProvider.Get();
 
+            // todo: not thread safe and scalable!
+            // need to queue incoming changes and process one-by-one in separate worker
+
             var appliedBatch = operationHandler.ApplyOperationBatch(document, operationBatch, revisionLog);
             revisionLog.Add(appliedBatch);
 

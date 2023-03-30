@@ -11,5 +11,7 @@ namespace CollaborativeEditing
     {
         public int DocumentRevision { get; set; }
         public OperationBase[] Operations { get; set; }
+
+        public override string ToString() => $"rev [{DocumentRevision}]\r\n{string.Join("\r\n", Operations.Select(o => o.ToString()))}";
     }
 }

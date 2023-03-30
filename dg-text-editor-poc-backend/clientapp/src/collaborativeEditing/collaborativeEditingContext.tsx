@@ -77,7 +77,6 @@ export const CollaborativeEditingContextProvider: React.FC<{
   );
 
   const handleUserUpdated = React.useCallback((updatedUser: UserContext) => {
-    console.log({ updatedUser });
     setOtherUsers((users) =>
       users.map((user) =>
         user.userId === updatedUser.userId
@@ -123,10 +122,12 @@ export const CollaborativeEditingContextProvider: React.FC<{
         otherUsers,
         connect,
         updateUser: handleUserUpdated,
-        setDocumentRevision: (revision: number) =>
+        setDocumentRevision: (revision: number) => {
+          console.log(`New document revision: ${revision}`);
           setDocumentContext((context) =>
             isNotNil(context) ? { ...context, revision } : undefined
-          ),
+          );
+        },
       }}
     >
       {children}

@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -14,6 +16,7 @@ namespace CollaborativeEditing
         {
             if (document.Revision == batch.DocumentRevision)
             {
+                Debug.WriteLine($">>>Apply batch {batch.DocumentRevision} vs {document.Revision}:\r\n{batch}");
                 foreach (var operation in batch.Operations)
                 {
                     ApplyOperation(document, operation);
@@ -21,10 +24,12 @@ namespace CollaborativeEditing
 
                 document.IncreaseRevision();
 
+                Debug.WriteLine($"Result: {document.GetJson()}\r\n\r\n");
+
                 return batch;
             }
             else
-            {
+            {                
                 var revisionsToApply = revisionLog.Where(revision => revision.DocumentRevision >= batch.DocumentRevision);
                 if (!revisionsToApply.Any())
                 {
@@ -223,17 +228,22 @@ namespace CollaborativeEditing
         {
             if (transformAgainst.DocumentRevision - batch.DocumentRevision > 0) throw new Exception("Document revision of batch being transformed is too old");
 
+            Debug.WriteLine($">>>Transform batch {batch.DocumentRevision} against {transformAgainst.DocumentRevision}.\r\nBatch:{batch}\r\nAgainst:{transformAgainst}");
 
             var transformedOperations = batch.Operations
                 .Select(operation => TransformOperation(operation, transformAgainst))
                 .OfType<OperationBase>()
                 .ToArray();
 
-            return new OperationBatch()
+            var result = new OperationBatch()
             {
                 DocumentRevision = transformAgainst.DocumentRevision + 1,
                 Operations = transformedOperations
             };
+
+            Debug.WriteLine($"Result:{result}");
+
+            return result;
         }
 
         private OperationBase? TransformOperation(OperationBase operation, OperationBatch transformAgainst)
@@ -241,7 +251,7 @@ namespace CollaborativeEditing
             var clone = new OperationFactory().Clone(operation);
             foreach (var against in transformAgainst.Operations)
             {
-                if (against is IPositionOperation againstPosition)
+                if (against is IPathOperation againstPosition)
                 {
                     if (clone is IPositionOperation positionOperation)
                     {
@@ -283,6 +293,8 @@ namespace CollaborativeEditing
                     }
                 }
             }
+
+            Debug.WriteLine($"Transform operation result: [{operation}] => [{clone}]");
 
             return clone;
         }

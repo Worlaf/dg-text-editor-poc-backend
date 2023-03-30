@@ -51,6 +51,8 @@ namespace CollaborativeEditing
         public string Text { get; set; }
 
         public override string Type => "insert_text";
+
+        public override string ToString() => $"insert '{Text}'[{string.Join(", ", Path.Select(p => p.ToString()))}]@{Offset}";
     }
 
     public class MergeNodeOperation : NodeOperationBase, IPositionOperation
@@ -77,6 +79,8 @@ namespace CollaborativeEditing
         public int Offset { get; set; }
         public string Text { get; set; }
         public override string Type => "remove_text";
+
+        public override string ToString() => $"remove '{Text}'[{string.Join(", ", Path.Select(p => p.ToString()))}]@{Offset}";
     }
 
     public class SetNodeOperation : NodeOperationBase
